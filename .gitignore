@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.env
+.env.*
+venv/
+env/
+
+# Node
+node_modules/
+dist/
+build/
+
+# Google APIs & Sensitive Info
+credentials.json
+token.json
+*.pem
+*.key
+*.p12
+*.pfx
+client_secret.json
+
+
+# ChromaDB
+backend/chroma_db/
+!backend/chroma_db/.keep
+
+# OS & IDE
+.DS_Store
+.vscode/
+.idea/
+*.suo
+*.user
+backend/creds.json
+temp_repo/

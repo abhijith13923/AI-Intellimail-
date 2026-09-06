@@ -1,0 +1,45 @@
+@import "tailwindcss";
+@import "tailwindcss/utilities";
+
+@theme {
+  --color-glass-dark: rgba(17, 24, 39, 0.7);
+  --color-glass-border: rgba(255, 255, 255, 0.1);
+  --color-glass-light: rgba(255, 255, 255, 0.8);
+  --color-glass-light-border: rgba(0, 0, 0, 0.1);
+  --color-brand-primary: #8b5cf6; /* violet-500 */
+  --color-brand-secondary: #ec4899; /* pink-500 */
+}
+
+@layer utilities {
+  .glass-dark {
+    background: var(--color-glass-dark);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--color-glass-border);
+  }
+  
+  .glass-light {
+    background: var(--color-glass-light);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--color-glass-light-border);
+  }
+
+  .text-gradient {
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-image: linear-gradient(to right, var(--color-brand-primary), var(--color-brand-secondary));
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 antialiased selection:bg-violet-500/30;
+    /* subtle moving gradient background for premium feel */
+    background: radial-gradient(circle at 15% 50%, rgba(76, 29, 149, 0.15), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(157, 23, 77, 0.15), transparent 25%);
+    background-color: #020617; /* slate-950 */
+    background-attachment: fixed;
+  }
+}

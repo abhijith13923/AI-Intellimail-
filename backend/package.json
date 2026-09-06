@@ -1,0 +1,8 @@
+{
+  "name": "gmail-assistant-backend",
+  "version": "1.0.0",
+  "description": "FastAPI backend",
+  "scripts": {
+    "backend": ".\\start.bat"
+  }
+}
