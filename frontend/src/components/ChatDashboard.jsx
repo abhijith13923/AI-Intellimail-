@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Settings, LogOut, Mail, Loader2, Sparkles } from 'lucide-react';
+import { Send, Settings, LogOut, Mail, Loader2, Sparkles, Eye } from 'lucide-react';
+import ChunkInspector from './ChunkInspector';
 
 export default function ChatDashboard({ userProfile, onLogout }) {
   const [messages, setMessages] = useState([
@@ -11,6 +12,8 @@ export default function ChatDashboard({ userProfile, onLogout }) {
   ]);
   const [input, setInput] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [inspectorTrace, setInspectorTrace] = useState(null);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -21,6 +24,19 @@ export default function ChatDashboard({ userProfile, onLogout }) {
     scrollToBottom();
   }, [messages]);
 
+  // Build chat history from current messages (last 6 turns, excluding the greeting)
+  const buildChatHistory = () => {
+    const conversational = messages
+      .filter(m => m.id !== 1)                    // skip welcome message
+      .filter(m => !m.isLoading)                   // skip loading placeholders
+      .slice(-6);                                  // last 3 exchanges
+
+    return conversational.map(m => ({
+      role: m.role,
+      content: m.content,
+    }));
+  };
+
   const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
@@ -29,6 +45,8 @@ export default function ChatDashboard({ userProfile, onLogout }) {
     const newMessage = { id: Date.now(), role: 'user', content: userQuestion };
     setMessages((prev) => [...prev, newMessage]);
     setInput('');
+
+    const chatHistory = buildChatHistory();
 
     // Add a temporary loading message
     const loadingId = Date.now() + 1;
@@ -43,31 +61,51 @@ export default function ChatDashboard({ userProfile, onLogout }) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           question: userQuestion,
-          user_email: userProfile?.email || 'test@example.com' 
+          user_email: userProfile?.email || 'test@example.com',
+          chat_history: chatHistory,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch answer');
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Failed to fetch answer');
       }
 
       const data = await response.json();
-      
-      setMessages((prev) => 
-        prev.map(msg => 
-          msg.id === loadingId 
-            ? { id: loadingId, role: 'assistant', content: data.answer, sources: data.sources } 
+
+      setMessages((prev) =>
+        prev.map(msg =>
+          msg.id === loadingId
+            ? {
+                id: loadingId,
+                role: 'assistant',
+                content: data.answer,
+                sources: data.sources,
+                pipelineTrace: data.pipeline_trace,
+                semanticQuery: data.semantic_query,
+                metadataFilters: data.metadata_filters,
+              }
             : msg
         )
       );
+
+      // Auto-open the inspector for the latest response
+      if (data.pipeline_trace) {
+        setInspectorTrace(data.pipeline_trace);
+        setInspectorOpen(true);
+      }
     } catch (error) {
       console.error('Chat error:', error);
-      setMessages((prev) => 
-        prev.map(msg => 
-          msg.id === loadingId 
-            ? { id: loadingId, role: 'assistant', content: "Sorry, I encountered an error connecting to the backend. Is the server running?" } 
+      setMessages((prev) =>
+        prev.map(msg =>
+          msg.id === loadingId
+            ? {
+                id: loadingId,
+                role: 'assistant',
+                content: `Sorry, I encountered an error: ${error.message}. Is the server running?`
+              }
             : msg
         )
       );
@@ -90,6 +128,11 @@ export default function ChatDashboard({ userProfile, onLogout }) {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const openInspector = (trace) => {
+    setInspectorTrace(trace);
+    setInspectorOpen(true);
   };
 
   return (
@@ -119,7 +162,7 @@ export default function ChatDashboard({ userProfile, onLogout }) {
               <p className="text-xs text-slate-500 truncate">{userProfile?.email || 'Logged in via Google'}</p>
             </div>
           </div>
-          
+
           <button
             onClick={handleSync}
             disabled={isSyncing}
@@ -139,8 +182,19 @@ export default function ChatDashboard({ userProfile, onLogout }) {
           </button>
         </div>
 
+        {/* Chunk Inspector shortcut */}
+        {inspectorTrace && (
+          <button
+            onClick={() => setInspectorOpen(true)}
+            className="w-full py-2.5 px-4 mb-4 bg-violet-950/50 hover:bg-violet-900/50 text-violet-300 text-sm rounded-xl font-medium transition-colors border border-violet-800/30 flex items-center justify-center gap-2"
+          >
+            <Eye className="w-4 h-4" />
+            <span>Open Last Trace</span>
+          </button>
+        )}
+
         <div className="mt-auto">
-          <button 
+          <button
             onClick={onLogout}
             className="w-full py-3 px-4 text-slate-400 hover:text-slate-200 hover:bg-slate-900/50 rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
           >
@@ -151,10 +205,10 @@ export default function ChatDashboard({ userProfile, onLogout }) {
       </aside>
 
       {/* Main Chat Area */}
-      <main className="flex-1 flex flex-col relative z-0">
+      <main className="flex-1 flex flex-col relative z-0 min-w-0">
         {/* Subtle background glow */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-violet-900/10 via-slate-950 to-slate-950 -z-10" />
-        
+
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
           <div className="max-w-3xl mx-auto space-y-6">
@@ -179,16 +233,39 @@ export default function ChatDashboard({ userProfile, onLogout }) {
                       msg.content
                     )}
                   </p>
+
+                  {/* Sources */}
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-white/10">
                       <p className="text-xs text-slate-400 font-medium mb-2">Sources:</p>
                       <ul className="space-y-1">
                         {msg.sources.map((src, idx) => (
                           <li key={idx} className="text-xs text-slate-500 truncate">
-                            • {src.subject} ({src.sender})
+                            • {src.subject} ({src.sender?.split('<')[0].trim() || src.sender})
+                            {src.date_iso && (
+                              <span className="text-slate-600"> · {src.date_iso}</span>
+                            )}
                           </li>
                         ))}
                       </ul>
+                    </div>
+                  )}
+
+                  {/* Inspect button for assistant messages with traces */}
+                  {msg.role === 'assistant' && !msg.isLoading && msg.pipelineTrace && (
+                    <div className="mt-3 pt-3 border-t border-white/5">
+                      <button
+                        onClick={() => openInspector(msg.pipelineTrace)}
+                        className="flex items-center gap-1.5 text-[11px] text-violet-400 hover:text-violet-300 transition-colors font-medium"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Inspect Retrieval
+                        {msg.pipelineTrace?.timings?.total_ms && (
+                          <span className="text-slate-500 font-mono ml-1">
+                            ({msg.pipelineTrace.timings.total_ms}ms)
+                          </span>
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -226,6 +303,13 @@ export default function ChatDashboard({ userProfile, onLogout }) {
           </div>
         </div>
       </main>
+
+      {/* Live Chunk Inspector Drawer */}
+      <ChunkInspector
+        trace={inspectorTrace}
+        isOpen={inspectorOpen}
+        onClose={() => setInspectorOpen(false)}
+      />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import List, Dict, Any, Optional
 
 from app.rag.vector_store import ChromaDBStore
@@ -30,7 +31,7 @@ def _reciprocal_rank_fusion(
     rrf_scores: Dict[str, float] = {}
     doc_store: Dict[str, Dict[str, Any]] = {}   # id -> doc payload
 
-    for ranked_list in ranked_lists:
+    for list_idx, ranked_list in enumerate(ranked_lists):
         for rank, doc in enumerate(ranked_list, start=1):
             doc_id = doc[id_key]
             rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + (1.0 / (k + rank))
@@ -42,7 +43,7 @@ def _reciprocal_rank_fusion(
     results = []
     for doc_id in sorted_ids:
         doc = doc_store[doc_id].copy()
-        doc["rrf_score"] = rrf_scores[doc_id]
+        doc["rrf_score"] = round(rrf_scores[doc_id], 6)
         results.append(doc)
 
     return results
@@ -54,6 +55,9 @@ class HybridRetriever:
     Fusion (RRF), then returns the top-K fused candidates for reranking.
 
     Multi-tenancy is enforced at both retrieval layers via `user_email`.
+
+    Returns rich diagnostic telemetry alongside results so the pipeline
+    and frontend can render the Live Chunk Inspector.
     """
 
     def __init__(self, vector_store: ChromaDBStore, bm25_store: BM25Store):
@@ -81,7 +85,7 @@ class HybridRetriever:
                 "id": doc_id,
                 "text": documents[i],
                 "metadata": metadatas[i],
-                "vector_distance": distances[i] if distances else None,
+                "vector_distance": round(float(distances[i]), 6) if distances else None,
             })
         return docs
 
@@ -91,37 +95,47 @@ class HybridRetriever:
 
     def retrieve(
         self,
-        semantic_query: str,
+        semantic_query: Optional[str],
         user_email: str,
         top_k: int = None,
         metadata_filters: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+        is_metadata_only: bool = False,
+    ) -> Dict[str, Any]:
         """
-        Runs hybrid retrieval and returns `top_k` fused candidates.
+        Runs hybrid retrieval and returns fused candidates plus rich telemetry.
 
         Steps:
           1. Semantic search  → ChromaDB (dense vectors).
           2. Keyword search   → BM25 (sparse term-matching).
           3. Fuse both lists  → Reciprocal Rank Fusion.
-          4. Return top-K for downstream reranking.
+          4. Return top-K + full diagnostic trace.
 
         Args:
             semantic_query:   The cleaned user query (after metadata extraction).
+                              May be None for metadata-only queries.
             user_email:       Used to scope results to a single user.
             top_k:            How many fused candidates to return.
-            metadata_filters: Optional ChromaDB-compatible metadata filter dict.
+            metadata_filters: Raw filter dict from QueryParser.
+            is_metadata_only: Hint that this is a pure metadata lookup —
+                              adjust retrieval accordingly.
 
         Returns:
-            List of fused candidate dicts, each with id, text, metadata, rrf_score.
+            Dict with keys:
+              - candidates:     Top-K fused result dicts.
+              - dense_results:  Raw ChromaDB hits (for inspector).
+              - sparse_results: Raw BM25 hits (for inspector).
+              - timings:        {"dense_ms", "sparse_ms", "fusion_ms"}
         """
         if top_k is None:
             top_k = settings.RETRIEVAL_TOP_K
 
         logger.info(
-            f"HybridRetriever.retrieve | user={user_email} | query='{semantic_query}' | top_k={top_k}"
+            f"HybridRetriever.retrieve | user={user_email} | "
+            f"query='{str(semantic_query)[:80]}' | metadata_only={is_metadata_only} | top_k={top_k}"
         )
 
         # 1. Dense retrieval — ChromaDB
+        t0 = time.perf_counter()
         chroma_raw = self.vector_store.search(
             query=semantic_query,
             user_email=user_email,
@@ -129,18 +143,33 @@ class HybridRetriever:
             metadata_filters=metadata_filters,
         )
         dense_results = self._normalise_chroma_results(chroma_raw)
-        logger.info(f"Dense retrieval returned {len(dense_results)} results.")
+        dense_ms = round((time.perf_counter() - t0) * 1000)
+        logger.info(f"Dense retrieval returned {len(dense_results)} results in {dense_ms}ms.")
 
         # 2. Sparse retrieval — BM25
+        t1 = time.perf_counter()
         sparse_results = self.bm25_store.search(
             query=semantic_query,
             top_k=top_k,
             user_email=user_email,
+            metadata_filters=metadata_filters,
         )
-        logger.info(f"Sparse retrieval returned {len(sparse_results)} results.")
+        sparse_ms = round((time.perf_counter() - t1) * 1000)
+        logger.info(f"Sparse retrieval returned {len(sparse_results)} results in {sparse_ms}ms.")
 
         # 3. Fuse via RRF
+        t2 = time.perf_counter()
         fused = _reciprocal_rank_fusion([dense_results, sparse_results])
-        logger.info(f"RRF fusion produced {len(fused)} unique candidates.")
+        fusion_ms = round((time.perf_counter() - t2) * 1000)
+        logger.info(f"RRF fusion produced {len(fused)} unique candidates in {fusion_ms}ms.")
 
-        return fused[:top_k]
+        return {
+            "candidates": fused[:top_k],
+            "dense_results": dense_results,
+            "sparse_results": sparse_results,
+            "timings": {
+                "dense_ms": dense_ms,
+                "sparse_ms": sparse_ms,
+                "fusion_ms": fusion_ms,
+            },
+        }

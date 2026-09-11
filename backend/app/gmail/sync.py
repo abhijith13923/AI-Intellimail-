@@ -61,6 +61,11 @@ class IncrementalSyncService:
                  if part.get('filename'):
                      attachment_names.append(part['filename'])
 
+        # internalDate is millis-since-epoch and is always present + reliable.
+        # The chunker prefers this over the Date header for date normalization.
+        internal_date_ms = msg_data.get('internalDate')
+        internal_date = int(internal_date_ms) if internal_date_ms else None
+
         return {
             "id": msg_data['id'],
             "threadId": msg_data.get('threadId', ''),
@@ -70,7 +75,8 @@ class IncrementalSyncService:
             "recipients": get_header('To'),
             "cc": get_header('Cc'),
             "bcc": get_header('Bcc'),
-            "timestamp": get_header('Date'), # Note: might want to parse into uniform format
+            "timestamp": get_header('Date'),       # RFC 2822 header (display fallback)
+            "internal_date": internal_date,         # Gmail millis epoch (preferred for parsing)
             "labels": msg_data.get('labelIds', []),
             "body": body,
             "attachment_names": attachment_names

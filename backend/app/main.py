@@ -159,6 +159,9 @@ def trigger_initial_sync(user_email: str, days_back: int = 5):
 class RAGQueryRequest(BaseModel):
     question: str
     user_email: str
+    # Optional chat history for multi-turn contextual understanding.
+    # Each entry: {"role": "user"|"assistant", "content": "..."}
+    chat_history: Optional[List[Dict[str, Any]]] = None
 
 class RAGIngestRequest(BaseModel):
     emails: List[Dict[str, Any]]
@@ -184,10 +187,11 @@ async def rag_query(payload: RAGQueryRequest, request: Request):
             pipeline.query,
             payload.question,
             payload.user_email,
+            payload.chat_history,
         )
         return {"status": "success", **result}
     except Exception as e:
-        logger.error(f"RAG query failed: {e}")
+        logger.error(f"RAG query failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
