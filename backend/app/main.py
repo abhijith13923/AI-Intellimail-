@@ -100,7 +100,7 @@ async def auth_google(request: AuthCodeRequest):
         # Verify the ID token to extract user profile
         request_session = requests.Request()
         id_info = id_token.verify_oauth2_token(
-            credentials.id_token, request_session, flow.client_config['client_id']
+            credentials.id_token, request_session, flow.client_config['client_id'], clock_skew_in_seconds=10
         )
 
         logger.info("Saving token to token.json...")
