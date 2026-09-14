@@ -91,10 +91,9 @@ export default function ChatDashboard({ userProfile, onLogout }) {
         )
       );
 
-      // Auto-open the inspector for the latest response
+      // Store the trace so the 'Inspect Retrieval' button can open it on demand
       if (data.pipeline_trace) {
         setInspectorTrace(data.pipeline_trace);
-        setInspectorOpen(true);
       }
     } catch (error) {
       console.error('Chat error:', error);
@@ -234,22 +233,7 @@ export default function ChatDashboard({ userProfile, onLogout }) {
                     )}
                   </p>
 
-                  {/* Sources */}
-                  {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-white/10">
-                      <p className="text-xs text-slate-400 font-medium mb-2">Sources:</p>
-                      <ul className="space-y-1">
-                        {msg.sources.map((src, idx) => (
-                          <li key={idx} className="text-xs text-slate-500 truncate">
-                            • {src.subject} ({src.sender?.split('<')[0].trim() || src.sender})
-                            {src.date_iso && (
-                              <span className="text-slate-600"> · {src.date_iso}</span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+
 
                   {/* Inspect button for assistant messages with traces */}
                   {msg.role === 'assistant' && !msg.isLoading && msg.pipelineTrace && (
