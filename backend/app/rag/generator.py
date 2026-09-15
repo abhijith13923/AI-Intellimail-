@@ -1,8 +1,9 @@
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from langchain_groq import ChatGroq
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.messages import HumanMessage, AIMessage
 
 from app.config import settings
 from app.rag.prompt import get_rag_prompt_template, format_context
@@ -40,6 +41,7 @@ class Generator:
         self,
         question: str,
         reranked_docs: List[Dict[str, Any]],
+        chat_history: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """
         Generate a final, grounded answer from the reranked context.
@@ -47,6 +49,7 @@ class Generator:
         Args:
             question:      The user's original question.
             reranked_docs: Top-N chunks from the Reranker.
+            chat_history:  Optional previous conversation turns.
 
         Returns:
             The LLM's answer as a plain string.
@@ -57,10 +60,23 @@ class Generator:
             f"context_chunks={len(reranked_docs)}"
         )
 
+        formatted_history = []
+        if chat_history:
+            # We limit to the last 6 messages (3 user, 3 assistant)
+            recent_history = chat_history[-6:]
+            for msg in recent_history:
+                role = msg.get("role", "")
+                content = msg.get("content", "")
+                if role == "user":
+                    formatted_history.append(HumanMessage(content=content))
+                elif role == "assistant":
+                    formatted_history.append(AIMessage(content=content))
+
         try:
             response = self.chain.invoke({
                 "context": context,
                 "question": question,
+                "chat_history": formatted_history,
             })
             return response
         except Exception as e:

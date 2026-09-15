@@ -174,6 +174,7 @@ class RAGPipeline:
         answer = self.generator.generate_response(
             question=user_question,
             reranked_docs=reranked,
+            chat_history=chat_history,
         )
         generation_ms = round((time.perf_counter() - t_gen_start) * 1000)
 

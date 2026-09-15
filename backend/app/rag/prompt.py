@@ -1,4 +1,4 @@
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 # ---------------------------------------------------------------------------
 # RAG Generation Prompt
@@ -33,12 +33,14 @@ def get_rag_prompt_template() -> ChatPromptTemplate:
     """
     Returns the ChatPromptTemplate used for the final RAG generation step.
 
-    The template has two input variables:
+    The template has three input variables:
       - context:  The formatted string of retrieved email chunks.
+      - chat_history: List of previous conversation messages.
       - question: The user's original question.
     """
     return ChatPromptTemplate.from_messages([
         ("system", RAG_SYSTEM_PROMPT),
+        MessagesPlaceholder(variable_name="chat_history"),
         ("human", RAG_HUMAN_PROMPT),
     ])
 
