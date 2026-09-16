@@ -6,8 +6,8 @@
   --color-glass-border: rgba(255, 255, 255, 0.1);
   --color-glass-light: rgba(255, 255, 255, 0.8);
   --color-glass-light-border: rgba(0, 0, 0, 0.1);
-  --color-brand-primary: #8b5cf6; /* violet-500 */
-  --color-brand-secondary: #ec4899; /* pink-500 */
+  --color-brand-primary: #9ca3af; /* gray-400 */
+  --color-brand-secondary: #f3f4f6; /* gray-100 */
 }
 
 @layer utilities {
@@ -35,11 +35,11 @@
 
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 antialiased selection:bg-violet-500/30;
+    @apply text-slate-100 antialiased selection:bg-slate-700/50;
     /* subtle moving gradient background for premium feel */
-    background: radial-gradient(circle at 15% 50%, rgba(76, 29, 149, 0.15), transparent 25%),
-                radial-gradient(circle at 85% 30%, rgba(157, 23, 77, 0.15), transparent 25%);
-    background-color: #020617; /* slate-950 */
+    background: radial-gradient(circle at 15% 50%, rgba(255, 255, 255, 0.03), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(255, 255, 255, 0.03), transparent 25%);
+    background-color: #09090b; /* zinc-950 */
     background-attachment: fixed;
   }
 }

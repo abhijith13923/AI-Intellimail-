@@ -63,8 +63,8 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 relative overflow-hidden z-0">
       {/* Background glow effects */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-violet-600/20 blur-[120px] -z-10"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-pink-600/20 blur-[120px] -z-10"></div>
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-slate-600/20 blur-[120px] -z-10"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-slate-600/20 blur-[120px] -z-10"></div>
 
       <div className="w-full max-w-md">
         <div className="glass-dark rounded-3xl p-10 shadow-2xl shadow-black/50 text-center border border-white/10 relative overflow-hidden">
@@ -72,8 +72,8 @@ function App() {
           {/* Subtle top highlight */}
           <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
 
-          <div className="w-16 h-16 mx-auto bg-gradient-to-br from-violet-500 to-pink-500 rounded-2xl flex items-center justify-center mb-8 shadow-lg shadow-violet-500/30 rotate-3 hover:rotate-6 transition-transform">
-            <Sparkles className="w-8 h-8 text-white" />
+          <div className="w-16 h-16 mx-auto bg-slate-800 rounded-2xl flex items-center justify-center mb-8 shadow-lg shadow-black/30 border border-white/10">
+            <Sparkles className="w-8 h-8 text-slate-300" />
           </div>
           
           <h1 className="text-3xl font-extrabold text-white mb-3 tracking-tight">
@@ -86,19 +86,19 @@ function App() {
           <div className="space-y-4 text-left mb-10">
             <div className="flex items-center gap-3 text-sm text-slate-300">
               <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center flex-shrink-0">
-                <Zap className="w-4 h-4 text-violet-400" />
+                <Zap className="w-4 h-4 text-slate-400" />
               </div>
               <p>Instant answers from thousands of emails</p>
             </div>
             <div className="flex items-center gap-3 text-sm text-slate-300">
               <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center flex-shrink-0">
-                <Shield className="w-4 h-4 text-pink-400" />
+                <Shield className="w-4 h-4 text-slate-400" />
               </div>
               <p>Private & secure multi-tenant architecture</p>
             </div>
             <div className="flex items-center gap-3 text-sm text-slate-300">
               <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center flex-shrink-0">
-                <Mail className="w-4 h-4 text-indigo-400" />
+                <Mail className="w-4 h-4 text-slate-400" />
               </div>
               <p>Continuous background synchronization</p>
             </div>
