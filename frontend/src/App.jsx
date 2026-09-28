@@ -51,13 +51,29 @@ function App() {
     },
   });
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setUserProfile(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      // Wipe all user data from the backend before clearing local session
+      await fetch(
+        `http://localhost:8000/api/user/data?user_email=${encodeURIComponent(userProfile?.email || '')}`,
+        { method: 'DELETE' }
+      );
+    } catch (err) {
+      console.error('Failed to clear user data on logout:', err);
+      // Still proceed with local logout even if backend call fails
+    } finally {
+      setIsLoggingOut(false);
+      setIsAuthenticated(false);
+      setUserProfile(null);
+    }
   };
 
+
   if (isAuthenticated) {
-    return <ChatDashboard userProfile={userProfile} onLogout={handleLogout} />;
+    return <ChatDashboard userProfile={userProfile} onLogout={handleLogout} isLoggingOut={isLoggingOut} />;
   }
 
   return (

@@ -34,3 +34,13 @@ class SyncStateManager:
         state = SyncStateManager._load_state()
         state[user_email] = str(history_id)
         SyncStateManager._save_state(state)
+
+    @staticmethod
+    def clear_user(user_email: str):
+        """Remove a specific user's sync history entry."""
+        state = SyncStateManager._load_state()
+        if user_email in state:
+            del state[user_email]
+            SyncStateManager._save_state(state)
+            logger.info(f"Cleared sync state for user {user_email}.")
+

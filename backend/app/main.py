@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import os
+import datetime
+from collections import Counter
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -13,6 +15,7 @@ from app.config import settings
 from app.gmail.sync import IncrementalSyncService
 from app.gmail.service import fetch_recent_emails
 from app.rag.pipeline import RAGPipeline
+from app.sync_state import SyncStateManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -150,6 +153,133 @@ def trigger_initial_sync(user_email: str, days_back: int = 5):
     except Exception as e:
         logger.error(f"Failed to trigger initial sync: {e}")
         return {"status": "error", "message": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Analytics Endpoint
+# ---------------------------------------------------------------------------
+
+@app.get("/api/analytics")
+async def get_analytics(user_email: str, request: Request):
+    """
+    Returns inbox analytics for the given user derived from the ChromaDB index.
+    Stats include: total indexed emails, unread count, read count, top senders,
+    and the timestamp of the last sync.
+    """
+    pipeline: RAGPipeline = request.app.state.rag_pipeline
+    collection = pipeline.vector_store.collection
+
+    try:
+        # Fetch all chunk metadata for this user (no embedding needed)
+        result = collection.get(
+            where={"user_email": {"$eq": user_email}},
+            include=["metadatas"],
+        )
+        metadatas = result.get("metadatas", []) or []
+
+        # De-duplicate by email_id so we count emails, not chunks
+        seen_email_ids = {}
+        for meta in metadatas:
+            email_id = meta.get("email_id")
+            if email_id and email_id not in seen_email_ids:
+                seen_email_ids[email_id] = meta
+
+        unique_emails = list(seen_email_ids.values())
+        total_indexed = len(unique_emails)
+
+        unread_count = sum(1 for m in unique_emails if m.get("unread") is True)
+        read_count = total_indexed - unread_count
+
+        # Top senders (top 5)
+        senders = [m.get("sender") or m.get("sender_email", "Unknown") for m in unique_emails]
+        # Strip long email format like "Name <email>" down to just the name part for display
+        def clean_sender(s: str) -> str:
+            if "<" in s:
+                return s.split("<")[0].strip().strip('"')
+            return s.strip()
+        sender_counts = Counter(clean_sender(s) for s in senders if s)
+        top_senders = [
+            {"name": name, "count": count}
+            for name, count in sender_counts.most_common(5)
+        ]
+
+        # Last sync time from sync state
+        history_id = SyncStateManager.get_history_id(user_email)
+        last_synced_str = "Never" if not history_id else "Recently"
+
+        return {
+            "status": "success",
+            "total_indexed": total_indexed,
+            "unread_count": unread_count,
+            "read_count": read_count,
+            "top_senders": top_senders,
+            "last_synced": last_synced_str,
+            "has_data": total_indexed > 0,
+        }
+    except Exception as e:
+        logger.error(f"Analytics query failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# User Data Management
+# ---------------------------------------------------------------------------
+
+@app.delete("/api/user/data")
+async def delete_user_data(user_email: str, request: Request):
+    """
+    Permanently deletes all data associated with a user:
+      - All ChromaDB chunks for this user (vector embeddings)
+      - Their entries from the BM25 in-memory index
+      - Their sync history (sync_state.json entry)
+      - token.json (their Gmail OAuth token)
+
+    This is called when the user signs out.
+    """
+    pipeline: RAGPipeline = request.app.state.rag_pipeline
+    deleted_chunks = 0
+
+    try:
+        # 1. Delete from ChromaDB
+        collection = pipeline.vector_store.collection
+        # Get all chunk IDs for this user first
+        result = collection.get(
+            where={"user_email": {"$eq": user_email}},
+            include=[],  # only need IDs
+        )
+        ids_to_delete = result.get("ids", [])
+        deleted_chunks = len(ids_to_delete)
+        if ids_to_delete:
+            collection.delete(ids=ids_to_delete)
+            logger.info(f"Deleted {deleted_chunks} ChromaDB chunks for user {user_email}.")
+
+        # 2. Rebuild BM25 without this user's docs
+        bm25 = pipeline.bm25_store
+        remaining_docs = [d for d in bm25._docs if d.get("metadata", {}).get("user_email") != user_email]
+        if remaining_docs:
+            bm25.index_documents(remaining_docs)
+        else:
+            # No docs left — reset completely
+            bm25.bm25 = None
+            bm25._docs = []
+        logger.info(f"BM25 index rebuilt without docs for user {user_email}.")
+
+        # 3. Clear sync state entry for this user
+        SyncStateManager.clear_user(user_email)
+
+        # 4. Remove token.json so the user is fully deauthenticated
+        if os.path.exists("token.json"):
+            os.remove("token.json")
+            logger.info("token.json removed.")
+
+        return {
+            "status": "success",
+            "message": f"All data cleared for {user_email}.",
+            "deleted_chunks": deleted_chunks,
+        }
+    except Exception as e:
+        logger.error(f"Failed to delete user data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------

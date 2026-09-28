@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Settings, LogOut, Mail, Loader2, Bot, Eye, Info } from 'lucide-react';
 import ChunkInspector from './ChunkInspector';
+import InboxAnalytics from './InboxAnalytics';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -68,11 +69,13 @@ const TypewriterMarkdown = ({ content }) => {
   );
 };
 
-export default function ChatDashboard({ userProfile, onLogout }) {
+export default function ChatDashboard({ userProfile, onLogout, isLoggingOut }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasSynced, setHasSynced] = useState(false);
+  const [syncCount, setSyncCount] = useState(0);
+  const [daysBack, setDaysBack] = useState(7);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspectorTrace, setInspectorTrace] = useState(null);
   const messagesEndRef = useRef(null);
@@ -181,14 +184,13 @@ export default function ChatDashboard({ userProfile, onLogout }) {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      const response = await fetch(`http://localhost:8000/api/sync/initial?user_email=${encodeURIComponent(userProfile?.email || 'test@example.com')}&days_back=5`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        throw new Error('Sync failed');
-      }
+      const response = await fetch(
+        `http://localhost:8000/api/sync/initial?user_email=${encodeURIComponent(userProfile?.email || 'test@example.com')}&days_back=${daysBack}`,
+        { method: 'POST' }
+      );
+      if (!response.ok) throw new Error('Sync failed');
       setHasSynced(true);
-      alert('Sync complete! Your emails have been indexed.');
+      setSyncCount(c => c + 1); // Triggers analytics refresh
     } catch (error) {
       console.error('Sync error:', error);
       alert('Failed to sync emails. Is the backend running?');
@@ -205,7 +207,7 @@ export default function ChatDashboard({ userProfile, onLogout }) {
   return (
     <div className="flex h-screen w-full bg-[#09090b] overflow-hidden text-slate-200">
       {/* Sidebar */}
-      <aside className="w-80 flex-shrink-0 bg-slate-950/80 backdrop-blur-xl border-r border-white/5 flex flex-col p-6 z-10">
+      <aside className="w-80 flex-shrink-0 bg-slate-950/80 backdrop-blur-xl border-r border-white/5 flex flex-col p-6 z-10 overflow-y-auto">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-white/10 shadow-lg">
             <Bot className="w-5 h-5 text-slate-300" />
@@ -228,6 +230,30 @@ export default function ChatDashboard({ userProfile, onLogout }) {
             </div>
           </div>
 
+          {/* Days-back selector */}
+          <div className="mb-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-2">
+              {hasSynced ? 'Re-sync range' : 'Sync range'}
+            </p>
+            <div className="flex gap-1.5 flex-wrap">
+              {[3, 7, 14, 30].map(d => (
+                <button
+                  key={d}
+                  onClick={() => setDaysBack(d)}
+                  disabled={isSyncing}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all border ${
+                    daysBack === d
+                      ? 'bg-slate-200 text-slate-900 border-slate-200 shadow-sm'
+                      : 'bg-transparent text-slate-500 border-slate-700/60 hover:border-slate-500 hover:text-slate-300'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sync button */}
           <button
             onClick={handleSync}
             disabled={isSyncing}
@@ -236,29 +262,45 @@ export default function ChatDashboard({ userProfile, onLogout }) {
             {isSyncing ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin text-slate-500" />
-                <span>Syncing Emails...</span>
+                <span>Syncing last {daysBack} days...</span>
               </>
             ) : hasSynced ? (
               <>
                 <Settings className="w-4 h-4 text-slate-500 group-hover:text-slate-700 transition-colors" />
-                <span>New Mails? Re-Sync</span>
+                <span>Re-Sync ({daysBack}d)</span>
               </>
             ) : (
               <>
                 <Settings className="w-4 h-4 text-slate-500 group-hover:text-slate-700 transition-colors" />
-                <span>Run Initial Sync</span>
+                <span>Sync last {daysBack} days</span>
               </>
             )}
           </button>
         </div>
 
+        {/* Analytics Panel */}
+        <InboxAnalytics
+          userEmail={userProfile?.email || 'test@example.com'}
+          refreshTrigger={syncCount}
+        />
+
         <div className="mt-auto">
           <button
             onClick={onLogout}
-            className="w-full py-3 px-4 text-slate-400 hover:text-slate-200 hover:bg-slate-900/50 rounded-xl text-sm font-medium transition-colors flex items-center gap-2"
+            disabled={isLoggingOut}
+            className="w-full py-3 px-4 text-slate-400 hover:text-slate-200 hover:bg-slate-900/50 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <LogOut className="w-4 h-4" />
-            Sign Out
+            {isLoggingOut ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Signing out...
+              </>
+            ) : (
+              <>
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </>
+            )}
           </button>
         </div>
       </aside>
